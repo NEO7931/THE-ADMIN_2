@@ -175,7 +175,7 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
           }}
         >
           <User style={{ width: "11px", height: "11px" }} />
-          VIEW_PROFILE
+          VIEW PROFILE
         </button>
 
         <button
@@ -200,7 +200,7 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
           }}
         >
           <Settings style={{ width: "11px", height: "11px" }} />
-          EDIT_PROFILE
+          EDIT PROFILE
         </button>
 
         <button

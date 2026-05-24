@@ -111,8 +111,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     .insert(usersTable)
     .values({
       username,
+      name: username,
       email,
-      passwordHash,
+      password: passwordHash,
       role: "user",
       status: "active",
       emailVerified: false,
@@ -213,7 +214,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   if (!user) { res.status(401).json({ error: "Invalid username or password" }); return; }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  const valid = await bcrypt.compare(password, user.password);
   if (!valid) { res.status(401).json({ error: "Invalid username or password" }); return; }
 
   if (user.status === "deleted") { res.status(401).json({ error: "Invalid username or password" }); return; }

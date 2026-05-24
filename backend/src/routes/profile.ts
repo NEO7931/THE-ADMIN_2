@@ -134,7 +134,7 @@ router.post("/password", requireAuth, async (req: any, res) => {
   if (!currentPassword || !newPassword) return res.status(400).json({ error: "Missing fields" });
 
   const [me] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId));
-  const ok = await bcrypt.compare(currentPassword, me.passwordHash);
+  const ok = await bcrypt.compare(currentPassword, me.password);
   if (!ok) return res.status(403).json({ error: "Current password is incorrect" });
 
   if (newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword)
@@ -143,7 +143,7 @@ router.post("/password", requireAuth, async (req: any, res) => {
     return res.status(400).json({ error: "Weak password — 12+ chars, mixed case, number, symbol, no username" });
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, req.session.userId));
+  await db.update(usersTable).set({ password: passwordHash }).where(eq(usersTable.id, req.session.userId));
   res.json({ ok: true });
 });
 

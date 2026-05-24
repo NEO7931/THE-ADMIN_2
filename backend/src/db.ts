@@ -10,20 +10,21 @@ export const db = drizzle(pool);
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
+  name: text("name").notNull(),
+  displayName: text("display_name"),
   email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  password: text("password").notNull(),
+  avatar: text("avatar"),
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("active"),
-  suspendedUntil: timestamp("suspended_until"),
-  suspensionReason: text("suspension_reason"),
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
   verificationTokenExpiry: timestamp("verification_token_expiry"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  displayName: text("display_name"),
-  avatar: text("avatar"),
-  hasGoldenCrowbar: boolean("has_golden_crowbar").default(false).notNull(),
+  suspendedUntil: timestamp("suspended_until"),
+  suspensionReason: text("suspension_reason"),
+  hasGoldenCrowbar: boolean("has_golden_crowbar").notNull().default(false),
   crowbarFoundAt: timestamp("crowbar_found_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const booksTable = pgTable("books", {

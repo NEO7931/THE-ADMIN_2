@@ -17,6 +17,7 @@ import History from "@/pages/history";
 import Admin from "@/pages/admin";
 import Notifications from "@/pages/notifications";
 import Fines from "@/pages/fines";
+import Profile from "@/pages/profile";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +72,12 @@ function Router() {
       </Route>
       <Route path="/fines">
         {(params) => <ProtectedRoute component={Fines} {...params} />}
+      </Route>
+      <Route path="/profile">
+        {(params) => <ProtectedRoute component={Profile} {...params} />}
+      </Route>
+      <Route path="/profile/settings">
+        {(params) => <ProtectedRoute component={Profile} {...params} />}
       </Route>
       <Route path="/admin">
         {(params) => <ProtectedRoute component={Admin} staffOnly {...params} />}

@@ -480,7 +480,7 @@ router.post("/users/:id/password", requireAdmin, async (req, res) => {
   if (!newPassword || newPassword.length < 12)
     return res.status(400).json({ error: "Password must be 12+ chars" });
   const passwordHash = await bcryptjs.hash(newPassword, 10);
-  await db.update(usersTable).set({ passwordHash, emailVerified: true })
+  await db.update(usersTable).set({ password: passwordHash, emailVerified: true })
     .where(eq(usersTable.id, Number(req.params.id)));
   res.json({ ok: true });
 });
