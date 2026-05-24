@@ -12,10 +12,13 @@ import notificationsRouter from "./notifications.js";
 import finesRouter from "./fines.js";
 import paymentsRouter from "./payments.js";
 import analyticsRouter from "./analytics.js";
-
+import profileRouter from "./profile";
+import easterEggRouter from "./easterEgg";
 
 const router: IRouter = Router();
 
+router.use("/profile", profileRouter);
+router.use("/easter-egg", easterEggRouter);
 router.use(docsRouter);
 router.use(healthRouter);
 router.use(authRouter);

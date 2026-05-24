@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { desc, eq, type SQL } from "drizzle-orm";
+import bcryptjs from 'bcryptjs';
 import {
   db,
   transactionsTable,
@@ -182,12 +183,13 @@ router.put("/admin/approve/:id", async (req, res): Promise<void> => {
 
   const [book] = await db.select().from(booksTable).where(eq(booksTable.id, transaction.bookId));
 
+  const dueDate = updated!.dueDate;
   await db.insert(notificationsTable).values({
     userId: transaction.userId,
     type: "borrow_approved",
-    title: "Borrow Request Approved",
-    message: `Your request to borrow "${book?.title ?? "a book"}" has been approved. Please pick it up before the due date.`,
-    metadata: { transactionId: id, bookId: transaction.bookId },
+    title: "✅ Borrow Approved — Return within 7 days",
+    message: `Your request to borrow "${book?.title ?? "a book"}" has been approved! You have exactly 7 days to return it. Due date: ${dueDate}. Late returns are fined ₱50/day.`,
+    metadata: { transactionId: id, bookId: transaction.bookId, dueDate },
   });
 
   res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
@@ -384,12 +386,16 @@ router.put("/admin/reservations/approve/:id", async (req, res): Promise<void> =>
 
   const [book] = await db.select().from(booksTable).where(eq(booksTable.id, reservation.bookId));
 
+  const pickupDeadline = new Date();
+  pickupDeadline.setHours(pickupDeadline.getHours() + 24);
+  const deadlineStr = pickupDeadline.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+
   await db.insert(notificationsTable).values({
     userId: reservation.userId,
     type: "reservation_confirmed",
-    title: "Reservation Confirmed",
-    message: `Your reservation for "${book?.title ?? "a book"}" has been confirmed. Please pick it up on ${reservation.pickupDate}.`,
-    metadata: { reservationId: id, bookId: reservation.bookId },
+    title: "📚 Reservation Confirmed — Pick up within 24 hours!",
+    message: `Your reservation for "${book?.title ?? "a book"}" is confirmed! You must pick it up within 24 hours (by ${deadlineStr}). If not picked up in time, your reservation will be automatically cancelled and the book returned to available.`,
+    metadata: { reservationId: id, bookId: reservation.bookId, pickupDeadline: pickupDeadline.toISOString() },
   });
 
   res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
@@ -442,6 +448,43 @@ router.put("/admin/reservations/reject/:id", async (req, res): Promise<void> => 
 
 
 // ─── User Management ─────────────────────────────────────────────────────────
+// Full details for one account — everything except the hash
+router.get("/users/:id", requireAdmin, async (req, res) => {
+  const [u] = await db.select({
+    id: usersTable.id, username: usersTable.username, email: usersTable.email,
+    role: usersTable.role, status: usersTable.status, suspendedUntil: usersTable.suspendedUntil,
+    emailVerified: usersTable.emailVerified, displayName: usersTable.displayName,
+    avatar: usersTable.avatar, hasGoldenCrowbar: usersTable.hasGoldenCrowbar,
+    crowbarFoundAt: usersTable.crowbarFoundAt, createdAt: usersTable.createdAt,
+  }).from(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+  if (!u) return res.status(404).json({ error: "Not found" });
+  res.json(u);
+});
+
+// Admin edits any account's profile fields
+router.patch("/users/:id/profile", requireAdmin, async (req, res) => {
+  const { username, email, displayName, avatar } = req.body ?? {};
+  const updates: Record<string, unknown> = {};
+  if (typeof username === "string")    updates.username = username.trim();
+  if (typeof email === "string")       updates.email = email.trim().toLowerCase();
+  if (typeof displayName === "string") updates.displayName = displayName.trim() || null;
+  if (typeof avatar === "string")      updates.avatar = avatar || null;
+  if (!Object.keys(updates).length) return res.status(400).json({ error: "Nothing to update" });
+  const [u] = await db.update(usersTable).set(updates)
+    .where(eq(usersTable.id, Number(req.params.id))).returning();
+  res.json({ ok: true, id: u.id });
+});
+
+// Admin sets a new password for any account (the "recovery" flow)
+router.post("/users/:id/password", requireAdmin, async (req, res) => {
+  const { newPassword } = req.body ?? {};
+  if (!newPassword || newPassword.length < 12)
+    return res.status(400).json({ error: "Password must be 12+ chars" });
+  const passwordHash = await bcryptjs.hash(newPassword, 10);
+  await db.update(usersTable).set({ passwordHash, emailVerified: true })
+    .where(eq(usersTable.id, Number(req.params.id)));
+  res.json({ ok: true });
+});
 
 router.get("/admin/users", async (req, res): Promise<void> => {
   if (!(await requireStaff(req, res))) return;

@@ -18,7 +18,11 @@ export const usersTable = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
   verificationTokenExpiry: timestamp("verification_token_expiry"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),displayName: text("display_name"),
+  avatar:text("avatar"), 
+  hasGoldenCrowbar: boolean("has_golden_crowbar").default(false).notNull(),
+  crowbarFoundAt:  timestamp("crowbar_found_at"),               
+  
 });
 
 export const booksTable = pgTable("books", {
