@@ -3,7 +3,7 @@ import { Volume2, VolumeX, Music, Play } from "lucide-react";
 
 // ── Set your YouTube video ID here ──────────────────────────────────────────
 const MUSIC_VIDEO_ID = "qEzWqUhnbVA";
-const VOLUME = 10;
+const VOLUME = 5;
 
 declare global {
   interface Window { YT: any; onYouTubeIframeAPIReady: () => void; }

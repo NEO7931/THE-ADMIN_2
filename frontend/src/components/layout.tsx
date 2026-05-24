@@ -1,6 +1,7 @@
 import { useAuth } from "@/lib/auth";
 import { notificationsApi, authApi } from "@/lib/api";
 import { MusicPlayer } from "./MusicPlayer";
+import { useEasterEgg, DancingBaby } from "./EasterEgg";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { BookOpen, UserCircle, LogOut, Bell, Zap } from "lucide-react";
@@ -116,6 +117,7 @@ function NotificationBell() {
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, setAuthUser } = useAuth();
+  const { clicks, handleLogoClick, show, setShow } = useEasterEgg();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -149,7 +151,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px", height: "56px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           {/* Logo */}
           <Link href="/">
-            <div className="logo-flicker" style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+            <div className="logo-flicker" onClick={handleLogoClick} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", position: "relative" }}>
               <div style={{
                 width: "32px", height: "32px", border: "1px solid #38bdf8",
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -157,7 +159,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
               }}>
                 <BookOpen style={{ width: "16px", height: "16px", color: "#38bdf8" }} />
               </div>
-              <div>
+              <div style={{ position: "relative" }}>
+                {clicks >= 5 && (
+                  <div style={{
+                    position: "absolute", top: "-8px", right: "-8px",
+                    background: "#38bdf8", color: "#080d14",
+                    fontFamily: "'Share Tech Mono', monospace",
+                    fontSize: "8px", fontWeight: 700,
+                    padding: "1px 4px", letterSpacing: "1px",
+                    zIndex: 10,
+                  }}>
+                    {30 - clicks}
+                  </div>
+                )}
                 <span style={{
                   fontFamily: "'Bebas Neue', sans-serif",
                   fontSize: "22px",
@@ -346,6 +360,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Floating music player */}
       <MusicPlayer />
+
+      {/* Easter egg */}
+      {show && <DancingBaby onClose={() => setShow(false)} />}
     </div>
   );
 }

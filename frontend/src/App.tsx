@@ -21,10 +21,11 @@ import Fines from "@/pages/fines";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2,
-      gcTime: 1000 * 60 * 10,
+      staleTime: 1000 * 30,         // data stays fresh 30 seconds
+      gcTime: 1000 * 60 * 5,        // cache kept 5 minutes
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,    // refresh when user switches back to tab
+      refetchOnMount: true,          // refresh when component mounts
     },
   },
 });

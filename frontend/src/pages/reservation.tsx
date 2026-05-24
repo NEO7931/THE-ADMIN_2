@@ -4,6 +4,7 @@ import { Layout } from "@/components/layout";
 import { reservationsApi, booksApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { CalendarDays, BookOpen, Plus, X } from "lucide-react";
+import { Countdown } from "@/components/Countdown";
 
 const STATUS: Record<string, { bg: string; color: string; border: string }> = {
   pending:   { bg: "#64748b11", color: "#64748b", border: "#64748b33" },
@@ -18,9 +19,11 @@ export default function Reservation() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ bookId: "", pickupDate: "", returnDate: "" });
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const today = new Date().toISOString().split("T")[0]!;
+  const maxReturnDate = form.pickupDate ? (() => { const d = new Date(form.pickupDate); d.setDate(d.getDate() + 7); return d.toISOString().split("T")[0]!; })() : undefined;
 
-  const { data: reservations = [], isLoading } = useQuery({ queryKey: ["reservations"], queryFn: () => reservationsApi.list() });
+  const { data: reservations = [], isLoading } = useQuery({ queryKey: ["reservations"], queryFn: () => reservationsApi.list(), refetchInterval: 30000 });
   const { data: books = [] } = useQuery({ queryKey: ["books", "", "", "available"], queryFn: () => booksApi.list({ status: "available" }) });
 
   const createMutation = useMutation({
@@ -78,7 +81,7 @@ export default function Reservation() {
               </div>
               <div>
                 <label style={{ display: "block", fontFamily: "'Share Tech Mono', monospace", fontSize: "9px", color: "#666", letterSpacing: "2px", marginBottom: "6px" }}>RETURN DATE</label>
-                <input type="date" required min={form.pickupDate || today} value={form.returnDate} onChange={e => setForm({ ...form, returnDate: e.target.value })}
+                <input type="date" required min={form.pickupDate || today} max={maxReturnDate} value={form.returnDate} onChange={e => setForm({ ...form, returnDate: e.target.value })}
                   style={neonInput}
                   onFocus={e => { e.currentTarget.style.borderColor = "#38bdf8"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "#4a5f78"; }} />
@@ -105,26 +108,39 @@ export default function Reservation() {
             <p style={{ color: "#444", fontFamily: "'Share Tech Mono', monospace", fontSize: "12px", letterSpacing: "2px" }}>NO_RESERVATIONS_FOUND</p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "#151e2d" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "#354a63" }}>
             {reservations.map((r: any) => {
               const st = STATUS[r.status] ?? STATUS.pending;
+              const isConfirmed = r.status === "confirmed";
+              const isOpen = expandedId === r.id;
               return (
-                <div key={r.id} style={{ background: "#141a24", padding: "20px 24px", display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap", transition: "background 0.2s" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#38bdf810"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "#141a24"; }}>
-                  <div style={{ width: "40px", height: "56px", background: "#1e2a3d", border: "1px solid #2e3a4e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-                    {r.book?.imageUrl ? <img src={r.book.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <BookOpen style={{ width: "14px", height: "14px", color: "#a8becc" }} />}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "15px", color: "#ffffff", margin: "0 0 6px 0" }}>{r.book?.title}</h3>
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "10px", color: "#444" }}>PICKUP: <span style={{ color: "#888" }}>{r.pickupDate}</span></span>
-                      <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "10px", color: "#444" }}>RETURN: <span style={{ color: "#888" }}>{r.returnDate}</span></span>
+                <div key={r.id}>
+                  <div
+                    style={{ background: isOpen ? "#253548" : "#1e2a3d", padding: "18px 24px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", transition: "background 0.2s", cursor: isConfirmed ? "pointer" : "default", borderLeft: isConfirmed ? "3px solid #38bdf844" : "3px solid transparent" }}
+                    onClick={() => isConfirmed && setExpandedId(prev => prev === r.id ? null : r.id)}
+                    onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = "#253548"; }}
+                    onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = "#1e2a3d"; }}
+                  >
+                    <div style={{ width: "40px", height: "56px", background: "#141a24", border: "1px solid #2e3a4e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                      {r.book?.imageUrl ? <img src={r.book.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <BookOpen style={{ width: "14px", height: "14px", color: "#354a63" }} />}
                     </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "15px", color: "#ffffff", margin: "0 0 6px 0" }}>{r.book?.title}</h3>
+                      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "10px", color: "#475569" }}>PICKUP: <span style={{ color: "#8aa4bc" }}>{r.pickupDate}</span></span>
+                        <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "10px", color: "#475569" }}>RETURN: <span style={{ color: "#8aa4bc" }}>{r.returnDate}</span></span>
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "9px", letterSpacing: "2px", padding: "4px 10px", background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
+                      {r.status.toUpperCase()}
+                    </span>
+                    {isConfirmed && <span style={{ color: "#38bdf855", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>}
                   </div>
-                  <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "9px", letterSpacing: "2px", padding: "4px 10px", background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
-                    {r.status.toUpperCase()}
-                  </span>
+                  {isConfirmed && isOpen && (
+                    <div style={{ background: "#141a24", padding: "0 24px 20px" }}>
+                      <Countdown approvedDate={r.createdAt} type="reservation" />
+                    </div>
+                  )}
                 </div>
               );
             })}

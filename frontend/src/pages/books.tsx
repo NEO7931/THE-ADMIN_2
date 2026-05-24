@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { booksApi, borrowApi } from "@/lib/api";
+import { booksApi, borrowApi, adminBooksApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Search, BookOpen, Filter } from "lucide-react";
@@ -14,11 +14,17 @@ const S = {
   card: { background: "#141a24", border: "1px solid #2e3a4e", padding: "0", overflow: "hidden" as const, transition: "border-color 0.2s, box-shadow 0.2s" },
 };
 
+
+
+
 const STATUS_STYLES: Record<string, { bg: string; color: string; border: string }> = {
-  available: { bg: "#00ff8811", color: "#00ff88", border: "#00ff8833" },
-  borrowed:  { bg: "#38bdf811", color: "#38bdf8", border: "#38bdf833" },
-  reserved:  { bg: "#64748b11", color: "#64748b", border: "#64748b33" },
+  available:   { bg: "#00ff8811", color: "#00ff88", border: "#00ff8833" },
+  borrowed:    { bg: "#38bdf811", color: "#38bdf8", border: "#38bdf833" },
+  reserved:    { bg: "#64748b11", color: "#64748b", border: "#64748b33" },
+  unavailable: { bg: "#ef444411", color: "#ef4444", border: "#ef444433" },
 };
+
+
 
 export default function Books() {
   const { user } = useAuth();
@@ -90,6 +96,7 @@ export default function Books() {
             <option value="available">Available</option>
             <option value="borrowed">Borrowed</option>
             <option value="reserved">Reserved</option>
+            <option value="unavailable">Unavailable</option>
           </select>
         </div>
 
@@ -135,6 +142,33 @@ export default function Books() {
                     <h3 style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "15px", color: "#ffffff", margin: "0 0 4px 0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any, overflow: "hidden" }}>{book.title}</h3>
                     <p style={{ color: "#555", fontSize: "12px", fontFamily: "'Rajdhani', sans-serif", marginBottom: "4px" }}>{book.author}</p>
                     <p style={{ color: "#444", fontSize: "11px", fontFamily: "'Share Tech Mono', monospace", marginBottom: "16px" }}>{book.category}</p>
+
+                    {/* Staff: status override dropdown */}
+                    {(user?.role === "admin" || user?.role === "librarian") && (
+                      <select
+                        value={book.status}
+                        onChange={async (e) => {
+                          try {
+                            await adminBooksApi.setStatus(book.id, e.target.value);
+                            qc.invalidateQueries({ queryKey: ["books"] });
+                          } catch (err: any) {
+                            toast({ title: "Error", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                        style={{
+                          width: "100%", padding: "6px 10px", marginBottom: "6px",
+                          background: "#141a24", border: "1px solid #354a63",
+                          color: "#c8d6e8", fontFamily: "'Share Tech Mono',monospace",
+                          fontSize: "10px", letterSpacing: "1px", cursor: "pointer",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <option value="available">available</option>
+                        <option value="borrowed">borrowed</option>
+                        <option value="reserved">reserved</option>
+                        <option value="unavailable">unavailable</option>
+                      </select>
+                    )}
 
                     {book.status === "available" && (
                       <button

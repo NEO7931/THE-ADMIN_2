@@ -136,6 +136,16 @@ export const adminBooksApi = {
     apiFetch<any>(`/admin/books/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
 };
 
+export const getMyProfile      = () => fetch("/api/profile/me", { credentials: "include" }).then(r => r.json());
+export const updateProfile     = (b: any) => fetch("/api/profile", { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(r => r.json());
+export const changeMyPassword  = (b: any) => fetch("/api/profile/password", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(r => r.json());
+export const attemptCrowbar    = (sequence: string[]) => fetch("/api/easter-egg/attempt", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sequence }) }).then(r => r.json());
+export const crowbarMeta       = () => fetch("/api/easter-egg/meta", { credentials: "include" }).then(r => r.json());
+// admin
+export const adminGetUser      = (id: number) => fetch(`/api/admin/users/${id}`, { credentials: "include" }).then(r => r.json());
+export const adminEditUser     = (id: number, b: any) => fetch(`/api/admin/users/${id}/profile`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(r => r.json());
+export const adminResetPassword= (id: number, newPassword: string) => fetch(`/api/admin/users/${id}/password`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newPassword }) }).then(r => r.json());
+
 export const analyticsApi = {
   overview: () => apiFetch<any>("/analytics/overview"),
   borrowTrends: (params?: { from?: string; to?: string }) => {
