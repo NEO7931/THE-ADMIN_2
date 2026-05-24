@@ -217,14 +217,28 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   if (!valid) { res.status(401).json({ error: "Invalid username or password" }); return; }
 
   if (user.status === "deleted") { res.status(401).json({ error: "Invalid username or password" }); return; }
-  if (user.status === "banned") { res.status(403).json({ error: "Your account has been banned. Please contact the administrator." }); return; }
+  if (user.status === "banned") {
+    res.status(403).json({
+      error: "Your account has been banned. Please contact the administrator.",
+      status: "banned",
+      reason: user.suspensionReason ?? "No reason provided",
+    });
+    return;
+  }
   if (user.status === "suspended") {
     // Auto-lift timeout if expired
     if (user.suspendedUntil && user.suspendedUntil < new Date()) {
       await db.update(usersTable).set({ status: "active", suspendedUntil: null }).where(eq(usersTable.id, user.id));
     } else {
-      const until = user.suspendedUntil ? ` until ${new Date(user.suspendedUntil).toLocaleString()}` : "";
-      res.status(403).json({ error: `Your account has been temporarily suspended${until}. Please contact the administrator.` });
+      const untilStr = user.suspendedUntil
+        ? `Suspended until ${new Date(user.suspendedUntil).toLocaleString()}`
+        : undefined;
+      res.status(403).json({
+        error: `Your account has been temporarily suspended${untilStr ? ` until ${new Date(user.suspendedUntil!).toLocaleString()}` : ""}. Please contact the administrator.`,
+        status: "suspended",
+        reason: user.suspensionReason ?? "No reason provided",
+        until: untilStr,
+      });
       return;
     }
   }

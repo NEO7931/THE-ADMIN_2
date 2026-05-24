@@ -447,12 +447,13 @@ router.put("/admin/reservations/reject/:id", async (req, res): Promise<void> => 
 });
 
 
-// ─── User Management ─────────────────────────────────────────────────────────
-// Full details for one account — everything except the hash
+// ─── User Management ──────────────────────────────────────────────────────────
+
 router.get("/users/:id", requireAdmin, async (req, res) => {
   const [u] = await db.select({
     id: usersTable.id, username: usersTable.username, email: usersTable.email,
     role: usersTable.role, status: usersTable.status, suspendedUntil: usersTable.suspendedUntil,
+    suspensionReason: usersTable.suspensionReason,
     emailVerified: usersTable.emailVerified, displayName: usersTable.displayName,
     avatar: usersTable.avatar, hasGoldenCrowbar: usersTable.hasGoldenCrowbar,
     crowbarFoundAt: usersTable.crowbarFoundAt, createdAt: usersTable.createdAt,
@@ -461,7 +462,6 @@ router.get("/users/:id", requireAdmin, async (req, res) => {
   res.json(u);
 });
 
-// Admin edits any account's profile fields
 router.patch("/users/:id/profile", requireAdmin, async (req, res) => {
   const { username, email, displayName, avatar } = req.body ?? {};
   const updates: Record<string, unknown> = {};
@@ -475,7 +475,6 @@ router.patch("/users/:id/profile", requireAdmin, async (req, res) => {
   res.json({ ok: true, id: u.id });
 });
 
-// Admin sets a new password for any account (the "recovery" flow)
 router.post("/users/:id/password", requireAdmin, async (req, res) => {
   const { newPassword } = req.body ?? {};
   if (!newPassword || newPassword.length < 12)
@@ -496,14 +495,21 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       email: usersTable.email,
       role: usersTable.role,
       status: usersTable.status,
+      suspendedUntil: usersTable.suspendedUntil,
+      suspensionReason: usersTable.suspensionReason,
       createdAt: usersTable.createdAt,
     })
     .from(usersTable)
     .orderBy(desc(usersTable.createdAt));
 
-  res.json(users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })));
+  res.json(users.map((u) => ({
+    ...u,
+    createdAt: u.createdAt.toISOString(),
+    suspendedUntil: u.suspendedUntil?.toISOString() ?? null,
+  })));
 });
 
+// ─── Shared helper for simple status changes ──────────────────────────────────
 async function setUserStatus(req: any, res: any, newStatus: string): Promise<void> {
   if (!(await requireStaff(req, res))) return;
 
@@ -511,136 +517,37 @@ async function setUserStatus(req: any, res: any, newStatus: string): Promise<voi
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const targetId = parseInt(raw!, 10);
 
-  if (isNaN(targetId)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  if (adminId === targetId) {
-    res.status(400).json({ error: "Cannot perform this action on your own account" });
-    return;
-  }
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (adminId === targetId) { res.status(400).json({ error: "Cannot perform this action on your own account" }); return; }
 
-  // Get caller role
   const [caller] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
-
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
-  if (!target) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Librarians can only act on regular users — not admins or other librarians
   if (caller?.role === "librarian" && (target.role === "admin" || target.role === "librarian")) {
-    res.status(403).json({ error: "Librarians can only manage regular user accounts" });
-    return;
+    res.status(403).json({ error: "Librarians can only manage regular user accounts" }); return;
   }
 
-  // Prevent deleting the last admin
   if (newStatus === "deleted" && target.role === "admin") {
     const admins = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
-    if (admins.length <= 1) {
-      res.status(400).json({ error: "Cannot delete the last admin account" });
-      return;
-    }
+    if (admins.length <= 1) { res.status(400).json({ error: "Cannot delete the last admin account" }); return; }
   }
 
   const [updated] = await db
     .update(usersTable)
-    .set({ status: newStatus })
+    .set({ status: newStatus, suspendedUntil: null, suspensionReason: null })
     .where(eq(usersTable.id, targetId))
     .returning();
 
   res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
 }
 
-router.put("/admin/users/:id/ban", (req, res) => setUserStatus(req, res, "banned"));
-router.put("/admin/users/:id/unban", (req, res) => setUserStatus(req, res, "active"));
-router.put("/admin/users/:id/suspend", (req, res) => setUserStatus(req, res, "suspended"));
+router.put("/admin/users/:id/unban",     (req, res) => setUserStatus(req, res, "active"));
 router.put("/admin/users/:id/unsuspend", (req, res) => setUserStatus(req, res, "active"));
-router.put("/admin/users/:id/restore", (req, res) => setUserStatus(req, res, "active"));
-router.delete("/admin/users/:id", (req, res) => setUserStatus(req, res, "deleted"));
+router.put("/admin/users/:id/restore",   (req, res) => setUserStatus(req, res, "active"));
+router.delete("/admin/users/:id",        (req, res) => setUserStatus(req, res, "deleted"));
 
-// ─── Book status override (admin or librarian) ────────────────────────────────
-router.patch("/admin/books/:id/status", async (req, res): Promise<void> => {
-  const userId = req.session?.userId;
-  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const [caller] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!caller || (caller.role !== "admin" && caller.role !== "librarian")) {
-    res.status(403).json({ error: "Staff access required" }); return;
-  }
-
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw!, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-
-  const { status } = req.body;
-  if (!["available", "borrowed", "reserved"].includes(status)) {
-    res.status(400).json({ error: "Invalid status. Must be available, borrowed, or reserved." });
-    return;
-  }
-
-  const [book] = await db.update(booksTable).set({ status }).where(eq(booksTable.id, id)).returning();
-  if (!book) { res.status(404).json({ error: "Book not found" }); return; }
-  res.json({ ...book, createdAt: book.createdAt.toISOString() });
-});
-
-// ─── Hard delete user (admin only) ───────────────────────────────────────────
-router.delete("/admin/users/:id/permanent", async (req, res): Promise<void> => {
-  if (!(await requireAdmin(req, res))) return;
-
-  const adminId = req.session!.userId!;
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const targetId = parseInt(raw!, 10);
-
-  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (adminId === targetId) { res.status(400).json({ error: "Cannot delete your own account" }); return; }
-
-  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
-  if (!target) { res.status(404).json({ error: "User not found" }); return; }
-
-  if (target.role === "admin") {
-    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
-    if (admins.length <= 1) {
-      res.status(400).json({ error: "Cannot delete the last admin account" }); return;
-    }
-  }
-
-  await db.delete(usersTable).where(eq(usersTable.id, targetId));
-  res.json({ message: `User ${target.username} permanently deleted` });
-});
-
-// ─── Change user role (admin only) ───────────────────────────────────────────
-router.put("/admin/users/:id/role", async (req, res): Promise<void> => {
-  if (!(await requireAdmin(req, res))) return;
-
-  const adminId = req.session!.userId!;
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const targetId = parseInt(raw!, 10);
-
-  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (adminId === targetId) { res.status(400).json({ error: "Cannot change your own role" }); return; }
-
-  const { role } = req.body;
-  if (!["user", "librarian", "admin"].includes(role)) {
-    res.status(400).json({ error: "Invalid role. Must be user, librarian, or admin." }); return;
-  }
-
-  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
-  if (!target) { res.status(404).json({ error: "User not found" }); return; }
-
-  // Prevent demoting the last admin
-  if (target.role === "admin" && role !== "admin") {
-    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
-    if (admins.length <= 1) {
-      res.status(400).json({ error: "Cannot demote the last admin account" }); return;
-    }
-  }
-
-  const [updated] = await db.update(usersTable).set({ role }).where(eq(usersTable.id, targetId)).returning();
-  res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
-});
-
-// ─── Timeout (timed suspension) ──────────────────────────────────────────────
+// ─── Timeout (timed suspension) ───────────────────────────────────────────────
 router.put("/admin/users/:id/timeout", async (req, res): Promise<void> => {
   if (!(await requireStaff(req, res))) return;
 
@@ -659,18 +566,26 @@ router.put("/admin/users/:id/timeout", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Librarians can only manage regular user accounts" }); return;
   }
 
-  // Duration in minutes
-  const { durationMinutes } = req.body;
+  const { durationMinutes, reason } = req.body;
   if (!durationMinutes || typeof durationMinutes !== "number" || durationMinutes <= 0) {
     res.status(400).json({ error: "Valid durationMinutes is required" }); return;
   }
 
   const suspendedUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
+  const suspensionReason = reason?.trim() || "You have been timed out by an administrator.";
 
   const [updated] = await db.update(usersTable)
-    .set({ status: "suspended", suspendedUntil })
+    .set({ status: "suspended", suspendedUntil, suspensionReason })
     .where(eq(usersTable.id, targetId))
     .returning();
+
+  await db.insert(notificationsTable).values({
+    userId: targetId,
+    type: "account_timeout",
+    title: "⏱ Account Timed Out",
+    message: `Your account has been timed out until ${suspendedUntil.toLocaleString("en-PH")}. Reason: ${suspensionReason}`,
+    metadata: { suspendedUntil: suspendedUntil.toISOString() },
+  });
 
   res.json({
     ...updated!,
@@ -678,6 +593,156 @@ router.put("/admin/users/:id/timeout", async (req, res): Promise<void> => {
     suspendedUntil: suspendedUntil.toISOString(),
     message: `User timed out until ${suspendedUntil.toLocaleString()}`,
   });
+});
+
+// ─── Suspend (indefinite) ─────────────────────────────────────────────────────
+router.put("/admin/users/:id/suspend", async (req, res): Promise<void> => {
+  if (!(await requireStaff(req, res))) return;
+
+  const callerId = req.session!.userId!;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const targetId = parseInt(raw!, 10);
+
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (callerId === targetId) { res.status(400).json({ error: "Cannot suspend your own account" }); return; }
+
+  const [caller] = await db.select().from(usersTable).where(eq(usersTable.id, callerId));
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (caller?.role === "librarian" && (target.role === "admin" || target.role === "librarian")) {
+    res.status(403).json({ error: "Librarians can only manage regular user accounts" }); return;
+  }
+
+  const { reason } = req.body;
+  const suspensionReason = reason?.trim() || "Your account has been suspended by an administrator.";
+
+  const [updated] = await db.update(usersTable)
+    .set({ status: "suspended", suspendedUntil: null, suspensionReason })
+    .where(eq(usersTable.id, targetId))
+    .returning();
+
+  await db.insert(notificationsTable).values({
+    userId: targetId,
+    type: "account_suspended",
+    title: "🚫 Account Suspended",
+    message: `Your account has been suspended indefinitely. Reason: ${suspensionReason}. Contact support to appeal.`,
+    metadata: {},
+  });
+
+  res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
+});
+
+// ─── Ban ──────────────────────────────────────────────────────────────────────
+router.put("/admin/users/:id/ban", async (req, res): Promise<void> => {
+  if (!(await requireStaff(req, res))) return;
+
+  const callerId = req.session!.userId!;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const targetId = parseInt(raw!, 10);
+
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (callerId === targetId) { res.status(400).json({ error: "Cannot ban your own account" }); return; }
+
+  const [caller] = await db.select().from(usersTable).where(eq(usersTable.id, callerId));
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (caller?.role === "librarian" && (target.role === "admin" || target.role === "librarian")) {
+    res.status(403).json({ error: "Librarians can only manage regular user accounts" }); return;
+  }
+
+  const { reason } = req.body;
+  const suspensionReason = reason?.trim() || "Your account has been permanently banned.";
+
+  const [updated] = await db.update(usersTable)
+    .set({ status: "banned", suspendedUntil: null, suspensionReason })
+    .where(eq(usersTable.id, targetId))
+    .returning();
+
+  await db.insert(notificationsTable).values({
+    userId: targetId,
+    type: "account_banned",
+    title: "🔨 Account Banned",
+    message: `Your account has been permanently banned. Reason: ${suspensionReason}.`,
+    metadata: {},
+  });
+
+  res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
+});
+
+// ─── Book status override ─────────────────────────────────────────────────────
+router.patch("/admin/books/:id/status", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const [caller] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!caller || (caller.role !== "admin" && caller.role !== "librarian")) {
+    res.status(403).json({ error: "Staff access required" }); return;
+  }
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { status } = req.body;
+  if (!["available", "borrowed", "reserved"].includes(status)) {
+    res.status(400).json({ error: "Invalid status. Must be available, borrowed, or reserved." }); return;
+  }
+
+  const [book] = await db.update(booksTable).set({ status }).where(eq(booksTable.id, id)).returning();
+  if (!book) { res.status(404).json({ error: "Book not found" }); return; }
+  res.json({ ...book, createdAt: book.createdAt.toISOString() });
+});
+
+// ─── Hard delete user ─────────────────────────────────────────────────────────
+router.delete("/admin/users/:id/permanent", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const adminId = req.session!.userId!;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const targetId = parseInt(raw!, 10);
+
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (adminId === targetId) { res.status(400).json({ error: "Cannot delete your own account" }); return; }
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (target.role === "admin") {
+    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
+    if (admins.length <= 1) { res.status(400).json({ error: "Cannot delete the last admin account" }); return; }
+  }
+
+  await db.delete(usersTable).where(eq(usersTable.id, targetId));
+  res.json({ message: `User ${target.username} permanently deleted` });
+});
+
+// ─── Change user role ─────────────────────────────────────────────────────────
+router.put("/admin/users/:id/role", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const adminId = req.session!.userId!;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const targetId = parseInt(raw!, 10);
+
+  if (isNaN(targetId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (adminId === targetId) { res.status(400).json({ error: "Cannot change your own role" }); return; }
+
+  const { role } = req.body;
+  if (!["user", "librarian", "admin"].includes(role)) {
+    res.status(400).json({ error: "Invalid role. Must be user, librarian, or admin." }); return;
+  }
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (target.role === "admin" && role !== "admin") {
+    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
+    if (admins.length <= 1) { res.status(400).json({ error: "Cannot demote the last admin account" }); return; }
+  }
+
+  const [updated] = await db.update(usersTable).set({ role }).where(eq(usersTable.id, targetId)).returning();
+  res.json({ ...updated!, createdAt: updated!.createdAt.toISOString() });
 });
 
 export default router;

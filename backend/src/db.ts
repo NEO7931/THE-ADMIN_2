@@ -15,14 +15,15 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("active"),
   suspendedUntil: timestamp("suspended_until"),
+  suspensionReason: text("suspension_reason"),
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
   verificationTokenExpiry: timestamp("verification_token_expiry"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),displayName: text("display_name"),
-  avatar:text("avatar"), 
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  displayName: text("display_name"),
+  avatar: text("avatar"),
   hasGoldenCrowbar: boolean("has_golden_crowbar").default(false).notNull(),
-  crowbarFoundAt:  timestamp("crowbar_found_at"),               
-  
+  crowbarFoundAt: timestamp("crowbar_found_at"),
 });
 
 export const booksTable = pgTable("books", {

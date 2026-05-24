@@ -57,13 +57,11 @@ const EXEMPT_PATHS = [
 ];
 
 app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
-  // Skip auth/public routes
-  if (EXEMPT_PATHS.some(p => req.path === p.replace("/api", "") || req.originalUrl === p)) {
-    return next();
-  }
+  const EXEMPT = ["/auth/login", "/auth/register", "/auth/verify-otp", "/auth/resend-otp", "/auth/logout", "/healthz"];
+  if (EXEMPT.some(p => req.path === p)) return next();
 
   const userId = (req as any).session?.userId;
-  if (!userId) return next(); // unauthenticated — let route handlers deal with it
+  if (!userId) return next();
 
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
@@ -72,38 +70,37 @@ app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
     // Auto-lift expired timeouts
     if (user.status === "suspended" && user.suspendedUntil && new Date() > new Date(user.suspendedUntil)) {
       await db.update(usersTable)
-        .set({ status: "active", suspendedUntil: null })
+        .set({ status: "active", suspendedUntil: null, suspensionReason: null })
         .where(eq(usersTable.id, userId));
       return next();
     }
 
-    // Block suspended users
     if (user.status === "suspended") {
+      // Force logout
+      (req as any).session = null;
       const until = user.suspendedUntil
         ? `Until: ${new Date(user.suspendedUntil).toLocaleString("en-PH")}`
-        : "This is a temporary suspension.";
+        : null;
       return res.status(403).json({
         error: "Account suspended",
-        reason: until,
         status: "suspended",
+        reason: user.suspensionReason ?? "Your account has been suspended.",
+        until,
       });
     }
 
-    // Block banned users
     if (user.status === "banned") {
+      (req as any).session = null;
       return res.status(403).json({
         error: "Account banned",
-        reason: "Your account has been permanently banned. Contact support if you believe this is a mistake.",
         status: "banned",
+        reason: user.suspensionReason ?? "Your account has been permanently banned.",
       });
     }
 
-    // Block deleted users
     if (user.status === "deleted") {
-      return res.status(403).json({
-        error: "Account not found",
-        status: "deleted",
-      });
+      (req as any).session = null;
+      return res.status(403).json({ error: "Account not found", status: "deleted" });
     }
 
     next();
