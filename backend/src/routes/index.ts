@@ -12,8 +12,8 @@ import notificationsRouter from "./notifications.js";
 import finesRouter from "./fines.js";
 import paymentsRouter from "./payments.js";
 import analyticsRouter from "./analytics.js";
-import profileRouter from "./profile";
-import easterEggRouter from "./easterEgg";
+import profileRouter from "./profile.js";
+import easterEggRouter from "./easterEgg.js";
 
 const router: IRouter = Router();
 
