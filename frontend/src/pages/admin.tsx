@@ -169,8 +169,8 @@ function UsersTab() {
     });
 
   const banMutation = useMutation({
-    mutationFn: (id: number) => userManagementApi.ban(id),
-    onSuccess: () => { toast({ title: "User banned" }); qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => userManagementApi.ban(id, reason),
+    onSuccess: () => { toast({ title: "User banned" }); qc.invalidateQueries({ queryKey: ["admin-users"] }); setActionModal(null); setActionReason(""); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -181,8 +181,8 @@ function UsersTab() {
   });
 
   const suspendMutation = useMutation({
-    mutationFn: (id: number) => userManagementApi.suspend(id),
-    onSuccess: () => { toast({ title: "User suspended" }); qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => userManagementApi.suspend(id, reason),
+    onSuccess: () => { toast({ title: "User suspended" }); qc.invalidateQueries({ queryKey: ["admin-users"] }); setActionModal(null); setActionReason(""); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -217,14 +217,17 @@ function UsersTab() {
   });
 
   const timeoutMutation = useMutation({
-    mutationFn: ({ id, durationMinutes }: { id: number; durationMinutes: number }) =>
-      userManagementApi.timeout(id, durationMinutes),
-    onSuccess: (data: any) => { toast({ title: "Timeout set", description: data.message }); qc.invalidateQueries({ queryKey: ["admin-users"] }); setTimeoutUser(null); },
+    mutationFn: ({ id, durationMinutes, reason }: { id: number; durationMinutes: number; reason: string }) =>
+      userManagementApi.timeout(id, durationMinutes, reason),
+    onSuccess: (data: any) => { toast({ title: "Timeout set", description: data.message }); qc.invalidateQueries({ queryKey: ["admin-users"] }); setTimeoutUser(null); setTimeoutReason(""); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const [timeoutUser, setTimeoutUser] = useState<{ id: number; username: string } | null>(null);
   const [timeoutDuration, setTimeoutDuration] = useState("60");
+  const [actionModal, setActionModal] = useState<{ id: number; username: string; type: "suspend" | "ban" } | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [timeoutReason, setTimeoutReason] = useState("");
 
   const STATUS_BADGE: Record<string, string> = {
     active: "bg-green-100 text-green-700",
@@ -255,13 +258,49 @@ function UsersTab() {
 
   return (
     <div>
+      {/* Suspend / Ban reason modal */}
+      {actionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setActionModal(null); setActionReason(""); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-900 mb-1">
+              {actionModal.type === "ban" ? "Ban" : "Suspend"} {actionModal.username}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {actionModal.type === "ban"
+                ? "This user will be permanently banned. Provide a reason."
+                : "This user will be suspended indefinitely until you lift it. Provide a reason."}
+            </p>
+            <textarea
+              placeholder="Enter reason..."
+              value={actionReason}
+              onChange={e => setActionReason(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (!actionReason.trim()) return;
+                  if (actionModal.type === "ban") banMutation.mutate({ id: actionModal.id, reason: actionReason });
+                  else suspendMutation.mutate({ id: actionModal.id, reason: actionReason });
+                }}
+                disabled={!actionReason.trim() || banMutation.isPending || suspendMutation.isPending}
+                className={`flex-1 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50 ${actionModal.type === "ban" ? "bg-red-600 hover:bg-red-700" : "bg-amber-500 hover:bg-amber-600"}`}>
+                {banMutation.isPending || suspendMutation.isPending ? "Processing..." : `Confirm ${actionModal.type === "ban" ? "Ban" : "Suspend"}`}
+              </button>
+              <button onClick={() => { setActionModal(null); setActionReason(""); }} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Timeout dialog */}
       {timeoutUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setTimeoutUser(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setTimeoutUser(null); setTimeoutReason(""); }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-gray-900 mb-1">Timeout {timeoutUser.username}</h3>
-            <p className="text-sm text-gray-500 mb-4">Select how long to suspend this account. It will automatically lift when the time expires.</p>
-            <div className="grid grid-cols-2 gap-2 mb-5">
+            <p className="text-sm text-gray-500 mb-3">Select duration and provide a reason.</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {TIMEOUT_OPTIONS.map(opt => (
                 <button key={opt.value}
                   onClick={() => setTimeoutDuration(String(opt.value))}
@@ -270,14 +309,21 @@ function UsersTab() {
                 </button>
               ))}
             </div>
+            <textarea
+              placeholder="Enter reason..."
+              value={timeoutReason}
+              onChange={e => setTimeoutReason(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
             <div className="flex gap-2">
               <button
-                onClick={() => timeoutMutation.mutate({ id: timeoutUser.id, durationMinutes: parseInt(timeoutDuration) })}
-                disabled={timeoutMutation.isPending}
+                onClick={() => timeoutMutation.mutate({ id: timeoutUser.id, durationMinutes: parseInt(timeoutDuration), reason: timeoutReason })}
+                disabled={!timeoutReason.trim() || timeoutMutation.isPending}
                 className="flex-1 bg-amber-500 text-white text-sm font-medium py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50">
                 {timeoutMutation.isPending ? "Setting..." : "Set Timeout"}
               </button>
-              <button onClick={() => setTimeoutUser(null)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { setTimeoutUser(null); setTimeoutReason(""); }} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
             </div>
           </div>
         </div>
@@ -383,11 +429,11 @@ function UsersTab() {
                               className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50 disabled:opacity-40">
                               <Clock className="h-3 w-3" /> Timeout
                             </button>
-                            <button onClick={() => { if (confirm(`Suspend ${u.username} indefinitely?`)) suspendMutation.mutate(u.id); }} disabled={isPending}
+                            <button onClick={() => { setActionModal({ id: u.id, username: u.username, type: "suspend" }); }} disabled={isPending}
                               className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 disabled:opacity-40">
                               <Clock className="h-3 w-3" /> Suspend
                             </button>
-                            <button onClick={() => { if (confirm(`Ban ${u.username}?`)) banMutation.mutate(u.id); }} disabled={isPending}
+                            <button onClick={() => { setActionModal({ id: u.id, username: u.username, type: "ban" }); }} disabled={isPending}
                               className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40">
                               <Ban className="h-3 w-3" /> Ban
                             </button>
@@ -411,7 +457,7 @@ function UsersTab() {
                               className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-green-200 text-green-600 hover:bg-green-50 disabled:opacity-40">
                               <ShieldCheck className="h-3 w-3" /> Unsuspend
                             </button>
-                            <button onClick={() => { if (confirm(`Ban ${u.username} instead?`)) banMutation.mutate(u.id); }} disabled={isPending}
+                            <button onClick={() => { setActionModal({ id: u.id, username: u.username, type: "ban" }); }} disabled={isPending}
                               className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40">
                               <Ban className="h-3 w-3" /> Ban
                             </button>

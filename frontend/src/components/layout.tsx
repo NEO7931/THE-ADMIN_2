@@ -3,8 +3,7 @@ import { notificationsApi, authApi } from "@/lib/api";
 import { MusicPlayer } from "./MusicPlayer";
 import { useEasterEgg, DancingBaby } from "./EasterEgg";
 import { Link, useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { BookOpen, UserCircle, LogOut, Bell, Zap } from "lucide-react";
+import { BookOpen, UserCircle, LogOut, Bell, Zap, Settings, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Popover,
@@ -18,15 +17,11 @@ function BookBackground() {
   return (
     <>
       <div className="scan-line" />
-
-      {/* Floating book pages */}
       <div className="pages-bg">
         {[1,2,3,4,5,6].map(i => (
           <div key={i} className={`book-page-float fp${i}`} />
         ))}
       </div>
-
-      {/* Ambient open book */}
       <div className="book-ambient">
         <svg viewBox="0 0 320 220" width="500" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="0" y="10" width="155" height="200" rx="2" fill="#38bdf8" opacity=".15"/>
@@ -40,8 +35,6 @@ function BookBackground() {
           ))}
         </svg>
       </div>
-
-      {/* Scan line sweep */}
       <div className="scan-line" style={{ position: "fixed", zIndex: 0 }} />
     </>
   );
@@ -114,6 +107,130 @@ function NotificationBell() {
   );
 }
 
+// ─── User Menu ────────────────────────────────────────────────────────────────
+function UserMenu({ username, onLogout }: { username: string; onLogout: () => void }) {
+  const [, setLocation] = useLocation();
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "4px 10px",
+            border: "1px solid #384558",
+            background: "#1e2a3d",
+            cursor: "pointer",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = "#38bdf844";
+            (e.currentTarget as HTMLElement).style.background = "#243044";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = "#384558";
+            (e.currentTarget as HTMLElement).style.background = "#1e2a3d";
+          }}
+        >
+          <UserCircle style={{ width: "12px", height: "12px", color: "#64748b" }} />
+          <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "11px", color: "#888" }}>
+            {username}
+          </span>
+          <span style={{ color: "#444", fontSize: "10px", marginLeft: "2px" }}>▾</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-48 p-0"
+        style={{ background: "#141a24", border: "1px solid #38bdf833", borderRadius: "2px", boxShadow: "0 0 30px #38bdf811" }}
+      >
+        <div style={{ padding: "8px 12px", borderBottom: "1px solid #2e3a4e" }}>
+          <p style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "10px", color: "#444", letterSpacing: "1px" }}>
+            LOGGED_IN_AS
+          </p>
+          <p style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "12px", color: "#38bdf8", marginTop: "2px" }}>
+            {username}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setLocation("/profile")}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: "8px",
+            padding: "10px 14px",
+            background: "transparent", border: "none",
+            color: "#888", cursor: "pointer",
+            fontFamily: "'Share Tech Mono', monospace", fontSize: "11px",
+            letterSpacing: "1px", textAlign: "left",
+            borderBottom: "1px solid #1e2a3d",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = "#38bdf810";
+            (e.currentTarget as HTMLElement).style.color = "#38bdf8";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+            (e.currentTarget as HTMLElement).style.color = "#888";
+          }}
+        >
+          <User style={{ width: "11px", height: "11px" }} />
+          VIEW_PROFILE
+        </button>
+
+        <button
+          onClick={() => setLocation("/profile/settings")}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: "8px",
+            padding: "10px 14px",
+            background: "transparent", border: "none",
+            color: "#888", cursor: "pointer",
+            fontFamily: "'Share Tech Mono', monospace", fontSize: "11px",
+            letterSpacing: "1px", textAlign: "left",
+            borderBottom: "1px solid #1e2a3d",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = "#38bdf810";
+            (e.currentTarget as HTMLElement).style.color = "#38bdf8";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+            (e.currentTarget as HTMLElement).style.color = "#888";
+          }}
+        >
+          <Settings style={{ width: "11px", height: "11px" }} />
+          EDIT_PROFILE
+        </button>
+
+        <button
+          onClick={onLogout}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: "8px",
+            padding: "10px 14px",
+            background: "transparent", border: "none",
+            color: "#666", cursor: "pointer",
+            fontFamily: "'Share Tech Mono', monospace", fontSize: "11px",
+            letterSpacing: "1px", textAlign: "left",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = "#ff000010";
+            (e.currentTarget as HTMLElement).style.color = "#ff4444";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+            (e.currentTarget as HTMLElement).style.color = "#666";
+          }}
+        >
+          <LogOut style={{ width: "11px", height: "11px" }} />
+          LOGOUT
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, setAuthUser } = useAuth();
@@ -132,10 +249,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", background: "#141a24", position: "relative", fontFamily: "'Rajdhani', sans-serif" }}>
-      {/* Background effects */}
       <BookBackground />
 
-      {/* Header */}
       <header style={{
         borderBottom: "1px solid #38bdf822",
         background: "rgba(30,36,51,0.97)",
@@ -145,7 +260,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         zIndex: 50,
         boxShadow: "0 1px 0 #38bdf811, 0 4px 20px #00000088",
       }}>
-        {/* Top accent line */}
         <div style={{ height: "2px", background: "linear-gradient(to right, #38bdf8, #64748b, #38bdf8)" }} />
 
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px", height: "56px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -246,53 +360,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Link>
             )}
 
-            {/* Divider */}
             <div style={{ width: "1px", height: "20px", background: "#38bdf822", margin: "0 8px" }} />
 
             {user ? (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <NotificationBell />
-
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  padding: "4px 10px",
-                  border: "1px solid #384558",
-                  background: "#1e2a3d",
-                }}>
-                  <UserCircle style={{ width: "12px", height: "12px", color: "#64748b" }} />
-                  <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: "11px", color: "#888" }}>
-                    {user.username}
-                  </span>
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "4px",
-                    padding: "4px 10px",
-                    border: "1px solid #38bdf833",
-                    background: "transparent",
-                    color: "#38bdf888",
-                    fontFamily: "'Share Tech Mono', monospace",
-                    fontSize: "10px",
-                    letterSpacing: "1px",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.background = "#38bdf811";
-                    (e.currentTarget as HTMLElement).style.color = "#38bdf8";
-                    (e.currentTarget as HTMLElement).style.boxShadow = "0 0 8px #38bdf822";
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color = "#38bdf888";
-                    (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                  }}
-                >
-                  <LogOut style={{ width: "10px", height: "10px" }} />
-                  LOGOUT
-                </button>
+                <UserMenu username={user.username} onLogout={handleLogout} />
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -339,12 +412,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main content */}
       <main style={{ flex: 1, position: "relative", zIndex: 1 }} className="page-enter">
         {children}
       </main>
 
-      {/* Footer */}
       <footer style={{
         borderTop: "1px solid #38bdf811",
         padding: "20px",
@@ -358,10 +429,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </p>
       </footer>
 
-      {/* Floating music player */}
       <MusicPlayer />
-
-      {/* Easter egg */}
       {show && <DancingBaby onClose={() => setShow(false)} />}
     </div>
   );

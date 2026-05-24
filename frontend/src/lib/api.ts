@@ -10,7 +10,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error((body as any).error ?? `HTTP ${res.status}`);
+    const err = new Error((body as any).error ?? `HTTP ${res.status}`) as any;
+    // Attach all response fields so callers can read status/reason/until etc.
+    Object.assign(err, body);
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -117,19 +120,7 @@ export const adminApi = {
     apiFetch<any>(`/admin/reservations/reject/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };
 
-export const userManagementApi = {
-  list: () => apiFetch<any[]>("/admin/users"),
-  ban: (id: number) => apiFetch<any>(`/admin/users/${id}/ban`, { method: "PUT" }),
-  unban: (id: number) => apiFetch<any>(`/admin/users/${id}/unban`, { method: "PUT" }),
-  suspend: (id: number) => apiFetch<any>(`/admin/users/${id}/suspend`, { method: "PUT" }),
-  unsuspend: (id: number) => apiFetch<any>(`/admin/users/${id}/unsuspend`, { method: "PUT" }),
-  softDelete: (id: number) => apiFetch<any>(`/admin/users/${id}`, { method: "DELETE" }),
-  hardDelete: (id: number) => apiFetch<any>(`/admin/users/${id}/permanent`, { method: "DELETE" }),
-  restore: (id: number) => apiFetch<any>(`/admin/users/${id}/restore`, { method: "PUT" }),
-  setRole: (id: number, role: string) => apiFetch<any>(`/admin/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
-  timeout: (id: number, durationMinutes: number) =>
-    apiFetch<any>(`/admin/users/${id}/timeout`, { method: "PUT", body: JSON.stringify({ durationMinutes }) }),
-};
+
 
 export const adminBooksApi = {
   setStatus: (id: number, status: string) =>
@@ -145,6 +136,24 @@ export const crowbarMeta       = () => fetch("/api/easter-egg/meta", { credentia
 export const adminGetUser      = (id: number) => fetch(`/api/admin/users/${id}`, { credentials: "include" }).then(r => r.json());
 export const adminEditUser     = (id: number, b: any) => fetch(`/api/admin/users/${id}/profile`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(r => r.json());
 export const adminResetPassword= (id: number, newPassword: string) => fetch(`/api/admin/users/${id}/password`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newPassword }) }).then(r => r.json());
+
+
+export const userManagementApi = {
+  list: () => apiFetch<any[]>("/admin/users"),
+  ban: (id: number, reason: string) => apiFetch<any>(`/admin/users/${id}/ban`, { method: "PUT", body: JSON.stringify({ reason }) }),
+  unban: (id: number) => apiFetch<any>(`/admin/users/${id}/unban`, { method: "PUT" }),
+  suspend: (id: number, reason: string) => apiFetch<any>(`/admin/users/${id}/suspend`, { method: "PUT", body: JSON.stringify({ reason }) }),
+  unsuspend: (id: number) => apiFetch<any>(`/admin/users/${id}/unsuspend`, { method: "PUT" }),
+  softDelete: (id: number) => apiFetch<any>(`/admin/users/${id}`, { method: "DELETE" }),
+  hardDelete: (id: number) => apiFetch<any>(`/admin/users/${id}/permanent`, { method: "DELETE" }),
+  restore: (id: number) => apiFetch<any>(`/admin/users/${id}/restore`, { method: "PUT" }),
+  setRole: (id: number, role: string) => apiFetch<any>(`/admin/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
+  timeout: (id: number, durationMinutes: number, reason: string) =>
+    apiFetch<any>(`/admin/users/${id}/timeout`, { method: "PUT", body: JSON.stringify({ durationMinutes, reason }) }),
+  delete: (id: number) => apiFetch<any>(`/admin/users/${id}`, { method: "DELETE" }),
+};
+
+
 
 export const analyticsApi = {
   overview: () => apiFetch<any>("/analytics/overview"),
