@@ -1,15 +1,14 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import cookieSession from "cookie-session";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
+import { db, usersTable } from "./db.js";
+import { eq } from "drizzle-orm";
 
 const app: Express = express();
 
-// Trust Vercel's proxy so `secure` cookies are set correctly behind HTTPS.
-// Without this, cookie-session's secure cookie (enabled in production) is
-// dropped and logins silently fail.
 app.set("trust proxy", 1);
 
 app.use(
@@ -17,16 +16,10 @@ app.use(
     logger,
     serializers: {
       req(req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   })
@@ -52,6 +45,72 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ─── Account Status Middleware ─────────────────────────────────────────────
+const EXEMPT_PATHS = [
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/verify-otp",
+  "/api/auth/resend-otp",
+  "/api/auth/logout",
+  "/api/healthz",
+];
+
+app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
+  // Skip auth/public routes
+  if (EXEMPT_PATHS.some(p => req.path === p.replace("/api", "") || req.originalUrl === p)) {
+    return next();
+  }
+
+  const userId = (req as any).session?.userId;
+  if (!userId) return next(); // unauthenticated — let route handlers deal with it
+
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) return next();
+
+    // Auto-lift expired timeouts
+    if (user.status === "suspended" && user.suspendedUntil && new Date() > new Date(user.suspendedUntil)) {
+      await db.update(usersTable)
+        .set({ status: "active", suspendedUntil: null })
+        .where(eq(usersTable.id, userId));
+      return next();
+    }
+
+    // Block suspended users
+    if (user.status === "suspended") {
+      const until = user.suspendedUntil
+        ? `Until: ${new Date(user.suspendedUntil).toLocaleString("en-PH")}`
+        : "This is a temporary suspension.";
+      return res.status(403).json({
+        error: "Account suspended",
+        reason: until,
+        status: "suspended",
+      });
+    }
+
+    // Block banned users
+    if (user.status === "banned") {
+      return res.status(403).json({
+        error: "Account banned",
+        reason: "Your account has been permanently banned. Contact support if you believe this is a mistake.",
+        status: "banned",
+      });
+    }
+
+    // Block deleted users
+    if (user.status === "deleted") {
+      return res.status(403).json({
+        error: "Account not found",
+        status: "deleted",
+      });
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.use("/api", router);
 
