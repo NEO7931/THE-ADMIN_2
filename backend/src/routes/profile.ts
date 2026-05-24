@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, ne } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "../db";
+import { db, usersTable } from "../db.js";
 // import { requireAuth } from "../middleware/auth";  // <- use your existing one
 // import { strongPassword } from "../schemas";        // <- reuse your register password rule
 
